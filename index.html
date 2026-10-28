@@ -390,9 +390,10 @@
     t.append(cs);
     h.append(t);
     s.append(h);
-    const doneN = c.actions.filter((a) => stOf(a.id) === 'done').length;
-    const pg = el('div', 'cprog'); pg.append(el('b', '', doneN + '/' + c.actions.length)); pg.append(document.createTextNode(' done'));
-    if (acts.length !== c.actions.length) pg.append(el('div', '', acts.length + ' in filter'));
+    const scope = sec ? c.actions.filter((a) => a.list === sec) : c.actions;
+    const doneN = scope.filter((a) => stOf(a.id) === 'done').length;
+    const pg = el('div', 'cprog'); pg.append(el('b', '', doneN + '/' + scope.length)); pg.append(document.createTextNode(' done in this phase'));
+    if (acts.length !== scope.length) pg.append(el('div', '', acts.length + ' match the filters'));
     s.append(pg);
     d.append(s);
     const w = el('div', 'where');
