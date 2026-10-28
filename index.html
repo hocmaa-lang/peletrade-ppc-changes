@@ -71,6 +71,12 @@
   .lst small { color: var(--muted); font-size: .8rem; grid-column: 2; }
   .lst[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .lst:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sechead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 14px 4px 2px; border-bottom: 2px solid var(--line); }
+  .sechead h2 { margin: 0; font-family: var(--f-display); font-size: 1.25rem; font-weight: 600; }
+  .sechead span { color: var(--muted); font-size: .88rem; }
+  .sechead.p1 { border-color: var(--bad); } .sechead.p1b { border-color: var(--p2); } .sechead.p2 { border-color: var(--m19); } .sechead.p3 { border-color: var(--ok); }
+  .ptag { font-size: .74rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; color: var(--panel); background: var(--muted); }
+  .ptag.p1 { background: var(--bad); } .ptag.p1b { background: var(--p2); } .ptag.p2 { background: var(--m19); } .ptag.p3 { background: var(--ok); }
   .anote { font-size: .84rem; line-height: 1.5; background: var(--ads-soft); color: var(--ink); border-radius: 6px; padding: 6px 10px; }
   .tag.dup { background: var(--bo-soft); color: var(--bo); }
   .tag.sb { background: var(--ez-soft); color: var(--ez); }
@@ -212,7 +218,8 @@
   </div>
 
   <div class="lists" role="group" aria-label="Phase">
-    <button class="lst" data-l="p1" aria-pressed="true"><b id="l-p1">—</b><span>Phase 1 · Close the waste</span><small>More than 20 clicks, zero orders in 31 days: pause or negate. Do this first.</small></button>
+    <button class="lst" data-l="both" aria-pressed="true"><b id="l-both">—</b><span>Phase 1 + Phase 2</span><small>Both phases on one page, Phase 1 first. Filter by phase with the buttons beside it</small></button>
+    <button class="lst" data-l="p1" aria-pressed="false"><b id="l-p1">—</b><span>Phase 1 · Close the waste</span><small>More than 20 clicks, zero orders in 31 days: pause or negate. Do this first.</small></button>
     <button class="lst" data-l="p1b" aria-pressed="false"><b id="l-p1b">—</b><span>Phase 1 · Your call</span><small>Same rule, but in low-converting campaigns where the zero can be chance</small></button>
     <button class="lst" data-l="p2" aria-pressed="false"><b id="l-p2">—</b><span>Phase 2 · Bids</span><small>Start only when you decide, at least 72 hours after Phase 1</small></button>
     <button class="lst" data-l="p3" aria-pressed="false"><b id="l-p3">—</b><span>Phase 3 · Growth adds</span><small>New exact keywords, budget, move-to-exact. After Phase 2 settles</small></button>
@@ -262,7 +269,7 @@
   const who = document.getElementById("who");
   try { who.value = localStorage.getItem("ppc_who") || ""; } catch (e) {}
   who.addEventListener("change", () => { who.classList.remove("need"); try { localStorage.setItem("ppc_who", who.value.trim()); } catch (e) {} });
-  const F = {l: 'p1', k: 'all', p: 'all', w: 'all', s: 'all', o: 'all', q: ''};
+  const F = {l: 'both', k: 'all', p: 'all', w: 'all', s: 'all', o: 'all', q: ''};
   const open = new Set();
   const ownerOf = (c) => c.owner || (/\bEZ\b/.test(c.campaign) ? 'EZ' : /\bBO\b/.test(c.campaign) ? 'BO' : 'Other');
 
@@ -276,10 +283,12 @@
     });
     return b;
   };
+  const PH = {p1: 'Phase 1 · Close the waste', p1b: 'Phase 1 · Your call', p2: 'Phase 2 · Bids (after 72 hours, your decision)', p3: 'Phase 3 · Growth adds', later: 'Not in this plan'};
+  const inL = (a) => F.l === 'all' || (F.l === 'both' ? ['p1', 'p1b', 'p2'].includes(a.list) : a.list === F.l);
   const stOf = (id) => (status[id] && status[id].status) || 'todo';
 
   const match = (c, a) => {
-    if (F.l !== 'all' && a.list !== F.l) return false;
+    if (!inL(a)) return false;
     if (F.k !== 'all' && a.kind !== F.k) return false;
     if (F.p !== 'all' && String(a.prio) !== F.p) return false;
     if (F.w !== 'all' && c.where !== F.w) return false;
@@ -325,7 +334,7 @@
     row.append(tick);
     const b = el('div', 'abody');
     const top = el('div', 'atop');
-    top.append(el('span', 'pr p' + a.prio), el('span', 'ktag ' + a.kind, a.label));
+    top.append(el('span', 'ptag ' + a.list, {p1: 'Phase 1', p1b: 'Phase 1 · your call', p2: 'Phase 2', p3: 'Phase 3', later: 'Not in plan'}[a.list]), el('span', 'pr p' + a.prio), el('span', 'ktag ' + a.kind, a.label));
     if (st === 'done' && s.done_at) top.append(el('span', 'done-at', 'Done ' + fmtDate(s.done_at)));
     if (st === 'skipped') top.append(el('span', 'done-at', 'Skipped'));
     if (s.by && st !== 'todo') top.append(el('span', 'by', 'by ' + s.by));
@@ -356,10 +365,11 @@
     return row;
   }
 
-  function campBlock(c, acts) {
-    const d = el('details', 'camp'); d.id = c.cid;
-    if (open.has(c.cid)) d.open = true;
-    d.addEventListener('toggle', () => { if (d.open) open.add(c.cid); else open.delete(c.cid); });
+  function campBlock(c, acts, sec) {
+    const key = c.cid + (sec ? '-' + sec : '');
+    const d = el('details', 'camp'); d.id = key;
+    if (open.has(key)) d.open = true;
+    d.addEventListener('toggle', () => { if (d.open) open.add(key); else open.delete(key); });
     const s = el('summary');
     s.append(el('span', 'cnum', String(c.order)));
     const h = el('div', 'chead');
@@ -406,6 +416,7 @@
     const kinds = ['negative', 'neg_asin', 'pause', 'bid', 'isolate', 'raise', 'budget', 'harvest'];
     const saveL = F.l; F.l = 'all'; const baseL = all.filter(([c, a]) => match(c, a)); F.l = saveL;
     ['p1', 'p1b', 'p2', 'p3', 'later'].forEach((l) => { $('#l-' + l).textContent = String(baseL.filter(([, a]) => a.list === l).length); });
+    $('#l-both').textContent = String(baseL.filter(([, a]) => ['p1', 'p1b', 'p2'].includes(a.list)).length);
     const p1Done = all.filter(([, a]) => (a.list === 'p1' || a.list === 'p1b') && stOf(a.id) === 'done').map(([, a]) => (status[a.id] && status[a.id].at) || '').filter(Boolean).sort();
     const p1Left = all.filter(([, a]) => a.list === 'p1' && stOf(a.id) === 'todo').length;
     const gate = $('#gate');
@@ -418,10 +429,17 @@
     kinds.forEach((k) => { const r = base.filter(([, a]) => a.kind === k); $('#k-' + k).textContent = all.length ? String(r.length) : '—'; $('#ks-' + k).textContent = r.length ? usd(r.reduce((s, [, a]) => s + a.m.spend, 0)) : ''; });
     let shown = 0;
     if (!camps.length) listEl.append(el('div', 'empty', 'No changes in the list yet.'));
-    camps.forEach((c) => { const acts = c.actions.filter((a) => match(c, a)); if (!acts.length) return; shown += acts.length; listEl.append(campBlock(c, acts)); });
+    const secs = F.l === 'both' ? ['p1', 'p1b', 'p2'] : F.l === 'all' ? ['p1', 'p1b', 'p2', 'p3', 'later'] : [F.l];
+    for (const sec of secs) {
+      const blocks = []; let n = 0, sp = 0;
+      camps.forEach((c) => { const acts = c.actions.filter((a) => a.list === sec && match(c, a)); if (!acts.length) return; n += acts.length; sp += acts.reduce((s, a) => s + a.m.spend, 0); blocks.push(campBlock(c, acts, sec)); });
+      if (!n) continue; shown += n;
+      const h = el('div', 'sechead ' + sec); h.append(el('h2', '', PH[sec]), el('span', '', n + ' changes · ' + usd(sp) + ' monthly spend · ' + blocks.length + ' campaigns'));
+      listEl.append(h); blocks.forEach((b) => listEl.append(b));
+    }
     if (camps.length && !shown) listEl.append(el('div', 'empty', 'No changes match these filters.'));
     const doneN = all.filter(([, a]) => stOf(a.id) === 'done').length;
-    const inList = all.filter(([, a]) => F.l === 'all' || a.list === F.l); const doneL = inList.filter(([, a]) => stOf(a.id) === 'done').length;
+    const inList = all.filter(([, a]) => inL(a)); const doneL = inList.filter(([, a]) => stOf(a.id) === 'done').length;
     $('#s-done').textContent = all.length ? doneL + ' / ' + inList.length : '—';
     $('#s-camps').textContent = camps.length ? String(camps.length) : '—';
     $('#s-spend').textContent = all.length ? usd(inList.filter(([, a]) => a.kind !== 'harvest').reduce((s, [, a]) => s + a.m.spend, 0)) : '—';
@@ -439,7 +457,7 @@
 
   camps = JSON.parse(document.getElementById('plan').textContent);
   camps.sort((a, b) => a.order - b.order);
-  if (camps[0]) open.add(camps[0].cid);
+  { const f = camps.find((c) => c.actions.some((a) => a.list === 'p1')); if (f) open.add(f.cid + '-p1'); }
   render();
   pull();
   setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 20000);
