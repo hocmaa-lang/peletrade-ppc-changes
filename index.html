@@ -305,25 +305,28 @@
     if (busy) return;
     try {
       const r = await fetch(API, {cache: 'no-store'}); const j = await r.json();
-      if (j.ok && !busy) { status = j.state || {}; online = true; setSync('Saved to the shared log · updated ' + new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})); render(); }
+      if (j.ok && !busy) { status = j.state || {}; online = true; setSync('Saved to the shared log · updated ' + new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})); if (typing()) pending = true; else render(); }
     } catch (e) { setSync("Offline: changes can’t be saved right now. Refresh in a moment."); }
   }
-  async function save(id, patch) {
+  let pending = false;
+  const typing = () => { const a = document.activeElement; return !!(a && a.classList && a.classList.contains('note')); };
+  document.addEventListener('focusout', (e) => { if (e.target.classList && e.target.classList.contains('note') && pending) setTimeout(() => { if (!typing() && pending) { pending = false; render(); } }, 400); });
+  async function save(id, patch, quiet) {
     const name = who.value.trim();
     if (!name) { who.classList.add('need'); who.focus(); toast('Type your name first, so the log shows who made the change.'); render(); return; }
     const prev = status[id];
-    status[id] = Object.assign({}, prev || {}, patch, {by: name}); render();
+    status[id] = Object.assign({}, prev || {}, patch, {by: name}); if (!quiet) render();
     busy++; setSync('Saving…');
     try {
       const r = await fetch(API, {method: 'POST', body: JSON.stringify(Object.assign({id, by: name}, patch))});
       const j = await r.json();
       if (!j.ok) throw new Error(j.error || 'failed');
       status = j.state || status; setSync('Saved · ' + new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}));
-      toast(patch.status === 'done' ? 'Saved as done' : 'Saved');
+      if (!quiet) toast(patch.status === 'done' ? 'Saved as done' : 'Saved');
     } catch (e) {
       if (prev) status[id] = prev; else delete status[id];
       setSync('Saving failed. Try again.'); toast('Saving failed. Check your connection and try again.');
-    } finally { busy--; render(); }
+    } finally { busy--; if (quiet || typing()) pending = true; else render(); }
   }
 
   function actRow(c, a) {
@@ -360,7 +363,9 @@
     const skip = el('button', 'btn', st === 'skipped' ? 'Back to to-do' : "Won't do"); skip.type = 'button'; skip.disabled = !online;
     skip.addEventListener('click', () => save(a.id, st === 'skipped' ? {status: 'todo'} : {status: 'skipped', done_at: null}));
     const note = el('input', 'note'); note.type = 'text'; note.id = 'nt-' + a.id; note.placeholder = 'Note (optional)'; note.value = s.note || ''; note.disabled = !online; note.setAttribute('aria-label', 'Note');
-    note.addEventListener('change', () => { if ((s.note || '') !== note.value) save(a.id, {note: note.value}); });
+    let nt; const saveNote = () => { clearTimeout(nt); const cur = (status[a.id] && status[a.id].note) || ''; if (cur !== note.value) save(a.id, {note: note.value}, true); };
+    note.addEventListener('input', () => { clearTimeout(nt); nt = setTimeout(saveNote, 1200); });
+    note.addEventListener('change', saveNote);
     ar.append(skip, note);
     b.append(ar);
     row.append(b);
